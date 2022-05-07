@@ -736,6 +736,7 @@ var NOOP_FUNC = function NOOP_FUNC() {};
  */
 // http://hacks.mozilla.org/2009/07/cross-site-xmlhttprequest-with-cors/
 // https://developer.mozilla.org/en-US/docs/DOM/XMLHttpRequest#withCredentials
+var USE_FETCH = _utils.window && _utils.window.fetch;
 var USE_XHR = _utils.window.XMLHttpRequest && 'withCredentials' in new XMLHttpRequest();
 
 // IE<10 does not support cross-origin XHR's but script tags
@@ -1083,7 +1084,7 @@ MixpanelLib.prototype._send_request = function (url, data, options, callback) {
         options = null;
     }
     options = _utils._.extend(DEFAULT_OPTIONS, options || {});
-    if (!USE_XHR) {
+    if (!USE_XHR && !USE_FETCH) {
         options.method = 'GET';
     }
     var use_post = options.method === 'POST';
@@ -1104,7 +1105,7 @@ MixpanelLib.prototype._send_request = function (url, data, options, callback) {
     if (this.get_config('img')) {
         data['img'] = 1;
     }
-    if (!USE_XHR) {
+    if (!USE_XHR && !USE_FETCH) {
         if (callback) {
             data['callback'] = callback;
         } else if (verbose_mode || this.get_config('test')) {
@@ -1127,6 +1128,8 @@ MixpanelLib.prototype._send_request = function (url, data, options, callback) {
     url += '?' + _utils._.HTTPBuildQuery(data);
 
     var lib = this;
+    var headers = this.get_config('xhr_headers');
+
     if ('img' in data) {
         var img = _utils.document.createElement('img');
         img.src = url;
@@ -1145,12 +1148,102 @@ MixpanelLib.prototype._send_request = function (url, data, options, callback) {
         } catch (e) {
             lib.report_error(e);
         }
+    } else if (USE_FETCH) {
+        var controller = new AbortController();
+
+        if (use_post) {
+            headers['Content-Type'] = 'application/x-www-form-urlencoded';
+        }
+
+        var promise;
+
+        if (options.timeout_ms && typeof req.timeout !== 'undefined') {
+            (function () {
+                var id = setTimeout(function () {
+                    return controller.abort();
+                }, options.timeout_ms);
+                promise = fetch(url, {
+                    headers: headers,
+                    method: options.method,
+                    signal: controller.signal
+                });
+                promise.then(function (res) {
+                    clearTimeout();
+                    return res;
+                });
+                promise['finally'](function () {
+                    return clearTimeout(id);
+                });
+            })();
+        } else {
+            promise = fetch(url, {
+                headers: headers,
+                method: options.method,
+                signal: controller.signal
+            });
+        }
+
+        promise.then(function (response) {
+            if (response.status === 200) {
+                if (callback) {
+                    if (verbose_mode) {
+                        response.text().then(function (responseText) {
+                            var responseData;
+
+                            try {
+                                responseData = _utils._.JSONDecode(responseText);
+                            } catch (e) {
+                                lib.report_error(e);
+                                if (options.ignore_json_errors) {
+                                    responseData = responseText;
+                                } else {
+                                    return;
+                                }
+                            }
+
+                            callback(responseData);
+                        });
+                    } else {
+                        callback(Number(req.responseText));
+                    }
+                }
+            } else {
+                var error;
+                if (req.timeout && !req.status && new Date().getTime() - start_time >= req.timeout) {
+                    error = 'timeout';
+                } else {
+                    error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText;
+                }
+                lib.report_error(error);
+                if (callback) {
+                    if (verbose_mode) {
+                        callback({ status: 0, error: error, xhr_req: req });
+                    } else {
+                        callback(0);
+                    }
+                }
+            }
+        })['catch'](function () {
+            var error;
+            if (req.timeout && !req.status && new Date().getTime() - start_time >= req.timeout) {
+                error = 'timeout';
+            } else {
+                error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText;
+            }
+            lib.report_error(error);
+            if (callback) {
+                if (verbose_mode) {
+                    callback({ status: 0, error: error, xhr_req: req });
+                } else {
+                    callback(0);
+                }
+            }
+        });
     } else if (USE_XHR) {
         try {
             var req = new XMLHttpRequest();
             req.open(options.method, url, true);
 
-            var headers = this.get_config('xhr_headers');
             if (use_post) {
                 headers['Content-Type'] = 'application/x-www-form-urlencoded';
             }

@@ -4052,6 +4052,7 @@ define(function () { 'use strict';
      */
     // http://hacks.mozilla.org/2009/07/cross-site-xmlhttprequest-with-cors/
     // https://developer.mozilla.org/en-US/docs/DOM/XMLHttpRequest#withCredentials
+    var USE_FETCH = (window$1 && window$1.fetch);
     var USE_XHR = (window$1.XMLHttpRequest && 'withCredentials' in new XMLHttpRequest());
 
     // IE<10 does not support cross-origin XHR's but script tags
@@ -4400,7 +4401,7 @@ define(function () { 'use strict';
             options = null;
         }
         options = _.extend(DEFAULT_OPTIONS, options || {});
-        if (!USE_XHR) {
+        if (!USE_XHR && !USE_FETCH) {
             options.method = 'GET';
         }
         var use_post = options.method === 'POST';
@@ -4413,7 +4414,7 @@ define(function () { 'use strict';
         if (this.get_config('test')) { data['test'] = 1; }
         if (verbose_mode) { data['verbose'] = 1; }
         if (this.get_config('img')) { data['img'] = 1; }
-        if (!USE_XHR) {
+        if (!USE_XHR && !USE_FETCH) {
             if (callback) {
                 data['callback'] = callback;
             } else if (verbose_mode || this.get_config('test')) {
@@ -4436,6 +4437,8 @@ define(function () { 'use strict';
         url += '?' + _.HTTPBuildQuery(data);
 
         var lib = this;
+        var headers = this.get_config('xhr_headers');
+
         if ('img' in data) {
             var img = document$1.createElement('img');
             img.src = url;
@@ -4454,12 +4457,104 @@ define(function () { 'use strict';
             } catch (e) {
                 lib.report_error(e);
             }
+        } else if (USE_FETCH) {
+            var controller = new AbortController();
+
+            if (use_post) {
+                headers['Content-Type'] = 'application/x-www-form-urlencoded';
+            }
+
+            var promise;
+
+            if (options.timeout_ms && typeof req.timeout !== 'undefined') {
+                const id = setTimeout(() => controller.abort(), options.timeout_ms);
+                promise = fetch(url, {
+                    headers,
+                    method: options.method,
+                    signal: controller.signal
+                });
+                promise.then(res => {
+                    clearTimeout();
+                    return res;
+                });
+                promise.finally(() => clearTimeout(id));
+            } else {
+                promise = fetch(url, {
+                    headers,
+                    method: options.method,
+                    signal: controller.signal
+                });
+            }
+
+            promise.then(response => {
+                if (response.status === 200) {
+                    if (callback) {
+                        if (verbose_mode) {
+                            response.text().then(responseText => {
+                                var responseData;
+
+                                try {
+                                    responseData = _.JSONDecode(responseText);
+                                } catch (e) {
+                                    lib.report_error(e);
+                                    if (options.ignore_json_errors) {
+                                        responseData =  responseText;
+                                    } else {
+                                        return;
+                                    }
+                                }
+
+                                callback(responseData);
+                            });
+                        } else {
+                            callback(Number(req.responseText));
+                        }
+                    }
+                } else {
+                    var error;
+                    if (
+                        req.timeout &&
+                        !req.status &&
+                        new Date().getTime() - start_time >= req.timeout
+                    ) {
+                        error = 'timeout';
+                    } else {
+                        error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText;
+                    }
+                    lib.report_error(error);
+                    if (callback) {
+                        if (verbose_mode) {
+                            callback({status: 0, error: error, xhr_req: req});
+                        } else {
+                            callback(0);
+                        }
+                    }
+                }
+            }).catch(() => {
+                var error;
+                if (
+                    req.timeout &&
+                    !req.status &&
+                    new Date().getTime() - start_time >= req.timeout
+                ) {
+                    error = 'timeout';
+                } else {
+                    error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText;
+                }
+                lib.report_error(error);
+                if (callback) {
+                    if (verbose_mode) {
+                        callback({status: 0, error: error, xhr_req: req});
+                    } else {
+                        callback(0);
+                    }
+                }
+            });
         } else if (USE_XHR) {
             try {
                 var req = new XMLHttpRequest();
                 req.open(options.method, url, true);
 
-                var headers = this.get_config('xhr_headers');
                 if (use_post) {
                     headers['Content-Type'] = 'application/x-www-form-urlencoded';
                 }
