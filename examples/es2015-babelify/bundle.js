@@ -1149,17 +1149,20 @@ MixpanelLib.prototype._send_request = function (url, data, options, callback) {
             lib.report_error(e);
         }
     } else if (USE_FETCH) {
-        var controller = new AbortController();
-
-        if (use_post) {
-            headers['Content-Type'] = 'application/x-www-form-urlencoded';
-        }
-
+        var controller;
         var promise;
 
-        if (options.timeout_ms && typeof req.timeout !== 'undefined') {
-            (function () {
-                var id = setTimeout(function () {
+        (function () {
+            controller = new AbortController();
+
+            if (use_post) {
+                headers['Content-Type'] = 'application/x-www-form-urlencoded';
+            }
+
+            var id = null;
+
+            if (options.timeout_ms && typeof req.timeout !== 'undefined') {
+                id = setTimeout(function () {
                     return controller.abort();
                 }, options.timeout_ms);
                 promise = fetch(url, {
@@ -1171,48 +1174,79 @@ MixpanelLib.prototype._send_request = function (url, data, options, callback) {
                     clearTimeout();
                     return res;
                 });
-                promise['finally'](function () {
-                    return clearTimeout(id);
+            } else {
+                promise = fetch(url, {
+                    headers: headers,
+                    method: options.method,
+                    signal: controller.signal
                 });
-            })();
-        } else {
-            promise = fetch(url, {
-                headers: headers,
-                method: options.method,
-                signal: controller.signal
-            });
-        }
+            }
 
-        promise.then(function (response) {
-            if (response.status === 200) {
-                if (callback) {
-                    if (verbose_mode) {
-                        response.text().then(function (responseText) {
-                            var responseData;
+            promise['finally'](function () {
+                if (id) {
+                    clearTimeout(id);
+                    id = null;
+                }
 
-                            try {
-                                responseData = _utils._.JSONDecode(responseText);
-                            } catch (e) {
-                                lib.report_error(e);
-                                if (options.ignore_json_errors) {
-                                    responseData = responseText;
-                                } else {
-                                    return;
-                                }
-                            }
-
-                            callback(responseData);
-                        });
-                    } else {
-                        callback(Number(req.responseText));
+                if (options.timeout_ms && new Date().getTime() - start_time >= options.timeout_ms) {
+                    var error = 'timeout';
+                    lib.report_error(error);
+                    if (callback) {
+                        if (verbose_mode) {
+                            callback({ status: 0, error: error, xhr_req: req });
+                        } else {
+                            callback(0);
+                        }
                     }
                 }
-            } else {
+            });
+
+            promise.then(function (response) {
+                if (response.status === 200) {
+                    if (callback) {
+                        if (verbose_mode) {
+                            response.text().then(function (responseText) {
+                                var responseData;
+
+                                try {
+                                    responseData = _utils._.JSONDecode(responseText);
+                                } catch (e) {
+                                    lib.report_error(e);
+                                    if (options.ignore_json_errors) {
+                                        responseData = responseText;
+                                    } else {
+                                        return;
+                                    }
+                                }
+
+                                callback(responseData);
+                            });
+                        } else {
+                            callback(Number(req.responseText));
+                        }
+                    }
+                } else {
+                    var error;
+                    if (!response.status && options.timeout_ms && new Date().getTime() - start_time >= options.timeout_ms) {
+                        error = 'timeout';
+                    } else {
+                        error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText;
+                    }
+                    lib.report_error(error);
+                    if (callback) {
+                        if (verbose_mode) {
+                            callback({ status: 0, error: error, xhr_req: req });
+                        } else {
+                            callback(0);
+                        }
+                    }
+                }
+            })['catch'](function () {
                 var error;
-                if (req.timeout && !req.status && new Date().getTime() - start_time >= req.timeout) {
+                if (new Date().getTime() - start_time >= req.timeout) {
                     error = 'timeout';
                 } else {
-                    error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText;
+                    error = 'Unknown error';
                 }
                 lib.report_error(error);
                 if (callback) {
@@ -1222,23 +1256,8 @@ MixpanelLib.prototype._send_request = function (url, data, options, callback) {
                         callback(0);
                     }
                 }
-            }
-        })['catch'](function () {
-            var error;
-            if (req.timeout && !req.status && new Date().getTime() - start_time >= req.timeout) {
-                error = 'timeout';
-            } else {
-                error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText;
-            }
-            lib.report_error(error);
-            if (callback) {
-                if (verbose_mode) {
-                    callback({ status: 0, error: error, xhr_req: req });
-                } else {
-                    callback(0);
-                }
-            }
-        });
+            });
+        })();
     } else if (USE_XHR) {
         try {
             var req = new XMLHttpRequest();

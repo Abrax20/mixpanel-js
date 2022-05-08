@@ -4532,9 +4532,10 @@
 	            }
 
 	            var promise;
+	            let id = null;
 
 	            if (options.timeout_ms && typeof req.timeout !== 'undefined') {
-	                const id = setTimeout(() => controller.abort(), options.timeout_ms);
+	                id = setTimeout(() => controller.abort(), options.timeout_ms);
 	                promise = fetch(url, {
 	                    headers,
 	                    method: options.method,
@@ -4544,7 +4545,6 @@
 	                    clearTimeout();
 	                    return res;
 	                });
-	                promise.finally(() => clearTimeout(id));
 	            } else {
 	                promise = fetch(url, {
 	                    headers,
@@ -4552,6 +4552,28 @@
 	                    signal: controller.signal
 	                });
 	            }
+
+	            promise.finally(() => {
+	                if (id) {
+	                    clearTimeout(id);
+	                    id = null;
+	                }
+
+	                if (
+	                    options.timeout_ms &&
+	                    new Date().getTime() - start_time >= options.timeout_ms
+	                ) {
+	                    let error = 'timeout';
+	                    lib.report_error(error);
+	                    if (callback) {
+	                        if (verbose_mode) {
+	                            callback({status: 0, error: error, xhr_req: req});
+	                        } else {
+	                            callback(0);
+	                        }
+	                    }
+	                }
+	            });
 
 	            promise.then(response => {
 	                if (response.status === 200) {
@@ -4580,9 +4602,9 @@
 	                } else {
 	                    var error;
 	                    if (
-	                        req.timeout &&
-	                        !req.status &&
-	                        new Date().getTime() - start_time >= req.timeout
+	                        !response.status &&
+	                        options.timeout_ms &&
+	                        new Date().getTime() - start_time >= options.timeout_ms
 	                    ) {
 	                        error = 'timeout';
 	                    } else {
@@ -4600,13 +4622,11 @@
 	            }).catch(() => {
 	                var error;
 	                if (
-	                    req.timeout &&
-	                    !req.status &&
 	                    new Date().getTime() - start_time >= req.timeout
 	                ) {
 	                    error = 'timeout';
 	                } else {
-	                    error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText;
+	                    error = 'Unknown error';
 	                }
 	                lib.report_error(error);
 	                if (callback) {
