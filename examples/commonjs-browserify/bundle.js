@@ -4468,7 +4468,7 @@ MixpanelLib.prototype._send_request = function(url, data, options, callback) {
         var promise;
         let id = null;
 
-        if (options.timeout_ms && typeof req.timeout !== 'undefined') {
+        if (options.timeout_ms) {
             id = setTimeout(() => controller.abort(), options.timeout_ms);
             promise = fetch(url, {
                 headers,
@@ -4556,7 +4556,7 @@ MixpanelLib.prototype._send_request = function(url, data, options, callback) {
         }).catch(() => {
             var error;
             if (
-                new Date().getTime() - start_time >= req.timeout
+                new Date().getTime() - start_time >= options.timeout_ms
             ) {
                 error = 'timeout';
             } else {

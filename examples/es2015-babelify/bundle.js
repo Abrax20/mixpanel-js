@@ -1161,7 +1161,7 @@ MixpanelLib.prototype._send_request = function (url, data, options, callback) {
 
             var id = null;
 
-            if (options.timeout_ms && typeof req.timeout !== 'undefined') {
+            if (options.timeout_ms) {
                 id = setTimeout(function () {
                     return controller.abort();
                 }, options.timeout_ms);
@@ -1243,7 +1243,7 @@ MixpanelLib.prototype._send_request = function (url, data, options, callback) {
                 }
             })['catch'](function () {
                 var error;
-                if (new Date().getTime() - start_time >= req.timeout) {
+                if (new Date().getTime() - start_time >= options.timeout_ms) {
                     error = 'timeout';
                 } else {
                     error = 'Unknown error';

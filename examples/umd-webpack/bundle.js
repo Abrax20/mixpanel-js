@@ -4534,7 +4534,7 @@
 	            var promise;
 	            let id = null;
 
-	            if (options.timeout_ms && typeof req.timeout !== 'undefined') {
+	            if (options.timeout_ms) {
 	                id = setTimeout(() => controller.abort(), options.timeout_ms);
 	                promise = fetch(url, {
 	                    headers,
@@ -4622,7 +4622,7 @@
 	            }).catch(() => {
 	                var error;
 	                if (
-	                    new Date().getTime() - start_time >= req.timeout
+	                    new Date().getTime() - start_time >= options.timeout_ms
 	                ) {
 	                    error = 'timeout';
 	                } else {
