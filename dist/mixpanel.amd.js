@@ -4469,8 +4469,10 @@ define(function () { 'use strict';
 
             if (options.timeout_ms) {
                 id = setTimeout(() => controller.abort(), options.timeout_ms);
-                promise = fetch(url, {
+                promise = window$1.fetch(url, {
                     headers,
+                    body: body_data,
+                    credentials: 'include',
                     method: options.method,
                     signal: controller.signal
                 });
@@ -4498,7 +4500,7 @@ define(function () { 'use strict';
                 ) {
                     let error = 'timeout';
                     lib.report_error(error);
-                    if (callback) {
+                    if (callback && typeof callback === 'function') {
                         if (verbose_mode) {
                             callback({status: 0, error: error, xhr_req: req});
                         } else {
@@ -4510,7 +4512,7 @@ define(function () { 'use strict';
 
             promise.then(response => {
                 if (response.status === 200) {
-                    if (callback) {
+                    if (callback  && typeof callback === 'function') {
                         if (verbose_mode) {
                             response.text().then(responseText => {
                                 var responseData;
@@ -4544,7 +4546,7 @@ define(function () { 'use strict';
                         error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText;
                     }
                     lib.report_error(error);
-                    if (callback) {
+                    if (callback && typeof callback === 'function') {
                         if (verbose_mode) {
                             callback({status: 0, error: error, xhr_req: req});
                         } else {
@@ -4562,7 +4564,7 @@ define(function () { 'use strict';
                     error = 'Unknown error';
                 }
                 lib.report_error(error);
-                if (callback) {
+                if (callback && typeof callback === 'function') {
                     if (verbose_mode) {
                         callback({status: 0, error: error, xhr_req: req});
                     } else {
