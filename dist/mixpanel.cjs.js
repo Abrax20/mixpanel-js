@@ -4483,8 +4483,9 @@ MixpanelLib.prototype._send_request = function(url, data, options, callback) {
         } else {
             promise = fetch(url, {
                 headers,
+                body: body_data,
+                credentials: 'include',
                 method: options.method,
-                signal: controller.signal
             });
         }
 

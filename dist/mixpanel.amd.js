@@ -4483,8 +4483,9 @@ define(function () { 'use strict';
             } else {
                 promise = fetch(url, {
                     headers,
+                    body: body_data,
+                    credentials: 'include',
                     method: options.method,
-                    signal: controller.signal
                 });
             }
 

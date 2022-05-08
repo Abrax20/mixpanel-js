@@ -1179,8 +1179,9 @@ MixpanelLib.prototype._send_request = function (url, data, options, callback) {
             } else {
                 promise = fetch(url, {
                     headers: headers,
-                    method: options.method,
-                    signal: controller.signal
+                    body: body_data,
+                    credentials: 'include',
+                    method: options.method
                 });
             }
 
