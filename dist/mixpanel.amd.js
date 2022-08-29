@@ -4104,6 +4104,7 @@ define(function () { 'use strict';
         'ip':                                true,
         'opt_out_tracking_by_default':       false,
         'opt_out_persistence_by_default':    false,
+        'allow_fetch':                       true,
         'opt_out_tracking_persistence_type': 'localStorage',
         'opt_out_tracking_cookie_prefix':    null,
         'property_blacklist':                [],
@@ -4459,7 +4460,7 @@ define(function () { 'use strict';
             } catch (e) {
                 lib.report_error(e);
             }
-        } else if (USE_FETCH) {
+        } else if (USE_FETCH && this.get_config('allow_fetch')) {
             var controller = new AbortController();
 
             if (use_post) {
